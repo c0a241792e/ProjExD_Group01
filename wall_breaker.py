@@ -11,7 +11,7 @@ SCREEN_HEIGHT = 600 # 画面の縦幅
 PADDLE_WIDTH = 100 # ラケットの横幅
 PADDLE_HEIGHT = 20 # ラケットの縦幅
 BALL_RADIUS = 10   # ボールの半径
-BLOCK_WIDTH = 75   # ブロックの横幅
+BLOCK_WIDTH = 69   # ブロックの横幅
 BLOCK_HEIGHT = 30  # ブロックの縦幅
 FPS = 60           # フレームレート
 
@@ -22,6 +22,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
+ORANGE = (255, 120, 0)
 
 # --- クラス定義 ---
 
@@ -98,17 +99,28 @@ class Ball:
 
 
         # ブロックとの衝突判定
-        collided_block = self.rect.collidelist(blocks) # どのブロックと衝突したか
-        if collided_block != -1: # -1以外は衝突
-            block = blocks.pop(collided_block) # 衝突したブロックをリストから削除
+        collided_index = self.rect.collidelist(blocks)
+        if collided_index != -1:
+            block = blocks[collided_index] # 衝突したブロックを取得
             
             # ボールの反射処理（簡易的にY方向のみ反転）
-            # 実際にはブロックの上下左右どこに当たったか判定すべきだが簡略化
             self.vy *= -1
             
-            return True # ブロックに当たった
-        
-        return False # ブロックに当たらなかった
+            # ブロックの耐久度を減らす
+            block.hp -= 1
+            
+            hit_score = 0
+            if block.hp <= 0:
+                # 耐久度が0になったらリストから削除し、スコアを取得
+                hit_score = block.score_value 
+                blocks.pop(collided_index)
+            else:
+                # ブロックに当たったが破壊はしなかった
+                hit_score = 0 # 破壊できなかったのでスコアは0
+
+            return hit_score # ブロックを破壊した場合、そのブロックのスコアを返す
+
+        return 0 # ブロックに当たらなかった
 
     def draw(self, screen):
         """ ボールを画面に描画 (円形) """
@@ -121,13 +133,27 @@ class Ball:
 
 class Block(pg.Rect):
     """ ブロックのクラス (pg.Rectを継承) """
-    def __init__(self, x, y, color):
+    def __init__(self, x, y, color, hp=1, score_value=10):
         super().__init__(x, y, BLOCK_WIDTH, BLOCK_HEIGHT)
-        self.color = color
+        self.max_hp = hp      # 最大耐久度
+        self.hp = hp          # 現在の耐久度
+        self.base_color = color # 元の色
+        self.score_value = score_value # 破壊時の得点
 
     def draw(self, screen):
         """ ブロックを画面に描画 """
-        pg.draw.rect(screen, self.color, self)
+        if self.hp > 1:
+            color_to_draw = self.base_color
+            if self.hp == 2:
+                color_to_draw = ORANGE
+            elif self.hp > 2:
+                color_to_draw = RED 
+        else:
+            color_to_draw = self.base_color
+
+        pg.draw.rect(screen, color_to_draw, self)
+        if self.hp > 1:
+            pg.draw.rect(screen, WHITE, self, 3) # 太さ3の白い枠線
 
 # --- メイン処理 ---
 
@@ -150,13 +176,39 @@ def main():
     blocks = []
     
     # ブロックの配置
-    block_colors = [RED, YELLOW, GREEN, BLUE]
+    block_colors = [GREEN, GREEN, GREEN, GREEN]
+
+    HP3_PROBABILITY = 0.20 # 10%の確率でHP 3 (超高耐久・超高得点)
+    HP2_PROBABILITY = 0.30 # 20%の確率でHP 2 (高耐久・高得点)
+    
     for y in range(4): # 4行
         for x in range(10): # 10列
+            
+            # ランダムにHPとスコアを決定
+            hp = 1
+            score_value = 10 # 基本スコア
+            
+            rand_val = random.random()
+
+            if rand_val < HP3_PROBABILITY:
+                hp = 3
+                score_value = 50 # HP 3 のスコア
+            elif rand_val < HP3_PROBABILITY + HP2_PROBABILITY:
+                hp = 2
+                score_value = 30 # HP 2 のスコア
+            # HP 1 は残りの確率 (70%)
+            else:
+                hp = 1
+                score_value = 10 # HP 1 のスコア           
+            # 行ごとに基本色を変える 
+            color = block_colors[y % len(block_colors)]
+                
             block = Block(
-                x * (BLOCK_WIDTH + 5) + 20,  # X座標 (隙間5px, 左マージン20px)
-                y * (BLOCK_HEIGHT + 5) + 30, # Y座標 (隙間5px, 上マージン30px)
-                block_colors[y % len(block_colors)] # 色を行ごとに変える
+                x * (BLOCK_WIDTH + 8) + 20, # <--- 隙間を広げ、配置を見やすく調整
+                y * (BLOCK_HEIGHT + 5) + 30, 
+                color,
+                hp=hp,             
+                score_value=score_value
             )
             blocks.append(block)
 
@@ -183,9 +235,9 @@ def main():
             
             # オブジェクトの更新
             paddle.update(keys)
-            if ball.update(paddle, blocks): # ブロックに当たったら
-                score += 10 # スコア加算
-
+            hit_score = ball.update(paddle, blocks) # <--- 戻り値でスコアを取得
+            if hit_score > 0: # ブロックを破壊した場合
+                score += hit_score # スコア加算
             # ゲームオーバー判定
             if ball.is_out_of_bounds():
                 game_over = True
