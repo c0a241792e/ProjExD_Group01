@@ -33,16 +33,25 @@ PARTICLE_LIFETIME = 30  # パーティクルの寿命（フレーム数）
 PARTICLE_SPEED = 5     # パーティクルの初期速度
 
 # --- サウンド設定 ---
-def load_sound():
+def load_sounds():
     """効果音をロード"""
     pg.mixer.init()  # mixer（音声周り）の初期化
+    sounds = {}
     try:
-        sound = pg.mixer.Sound("sound/break.mp3")  # 効果音をロード
-        sound.set_volume(0.4)  # 音量を40%に設定
-        return sound
-    except:
-        print("効果音ファイルの読み込みに失敗しました")
-        return None
+        # ブロック破壊音
+        break_sound = pg.mixer.Sound("sound/break.mp3")
+        break_sound.set_volume(0.4)  # 音量を40%に設定
+        sounds["break"] = break_sound
+        
+        # ゲームオーバー音
+        defeat_sound = pg.mixer.Sound("sound/defeat.mp3")
+        defeat_sound.set_volume(0.5)  # 音量を50%に設定
+        sounds["defeat"] = defeat_sound
+        
+    except Exception as e:
+        print(f"効果音ファイルの読み込みに失敗しました: {e}")
+    
+    return sounds
 
 # --- クラス定義 ---
 
@@ -234,7 +243,7 @@ def main():
     font = pg.font.Font(None, 50) # スコア表示用フォント
     
     # 効果音のロード
-    break_sound = load_sound()
+    sounds = load_sounds()
 
     # オブジェクトのインスタンス化
     paddle = Paddle()
@@ -273,7 +282,7 @@ def main():
             
             # オブジェクトの更新
             paddle.update(keys)
-            if ball.update(paddle, blocks, particles, break_sound): # ブロックに当たったら
+            if ball.update(paddle, blocks, particles, sounds.get("break")): # ブロックに当たったら
                 score += 10 # スコア加算
 
             # パーティクルの更新
@@ -282,6 +291,9 @@ def main():
             # ゲームオーバー判定
             if ball.is_out_of_bounds():
                 game_over = True
+                # ゲームオーバー効果音を再生
+                if sounds.get("defeat"):
+                    sounds["defeat"].play()
             
             # ブロックの移動と新しい行の追加（5秒ごと）
             current_time = time.time()
@@ -289,6 +301,9 @@ def main():
                 # 全ブロックを1段下に移動
                 if move_blocks_down(blocks):
                     game_over = True  # ブロックが下限に達したらゲームオーバー
+                    # ゲームオーバー効果音を再生
+                    if sounds.get("defeat"):
+                        sounds["defeat"].play()
                 else:
                     # 最上段に新しい行を追加
                     blocks.extend(create_block_row(30))  # 上端のY座標（30px）
