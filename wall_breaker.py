@@ -60,8 +60,8 @@ def load_sounds():
 PURPLE = (200, 0, 200)
 ORANGE = (255, 120, 0)
 
-HP3_PROBABILITY = 0.20 # 10%の確率でHP 3 (超高耐久・超高得点)
-HP2_PROBABILITY = 0.30 # 20%の確率でHP 2 (高耐久・高得点)
+HP3_PROBABILITY = 0.10 # 10%の確率でHP 3 (超高耐久・超高得点)
+HP2_PROBABILITY = 0.20 # 20%の確率でHP 2 (高耐久・高得点)
 
 # --- クラス定義 ---
 
@@ -599,7 +599,7 @@ def main():
             blocks.append(block)
 
     score = 0
-    life = 3
+    life = 1
     game_over = False
     game_clear = False
     
@@ -680,6 +680,8 @@ def main():
                 # --- item1の効果発動 ---
                 life_change = item_manager_ishii.activate(item_type, balls, paddle)
                 life += life_change # 残機を更新
+                if life > 5:
+                    life = 5
                 
                 # --- item2の効果発動 ---
                 if item_type in ["large_ball", "penetrate"]:
@@ -709,7 +711,7 @@ def main():
         balls = [ball for ball in balls if not ball.is_out_of_bounds()]
 
         # ボールが0個になったら残機を減らす
-        if not balls and not game_clear: 
+        if not balls and not game_clear and not game_over:
             life -= 1
             if life > 0:
                 balls.append(Ball()) 
