@@ -8,22 +8,23 @@ import math  # 標準のmathモジュールを追加
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # --- 定数設定 ---
-SCREEN_WIDTH = 800  # 画面の横幅
-SCREEN_HEIGHT = 600 # 画面の縦幅
-PADDLE_WIDTH = 100 # ラケットの横幅
-PADDLE_HEIGHT = 20 # ラケットの縦幅
-BALL_RADIUS = 10   # ボールの半径
-BLOCK_WIDTH = 75   # ブロックの横幅
-BLOCK_HEIGHT = 30  # ブロックの縦幅
-FPS = 60           # フレームレート
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+PADDLE_WIDTH = 100
+PADDLE_HEIGHT = 20
+BALL_RADIUS = 10
+BLOCK_WIDTH = 75
+BLOCK_HEIGHT = 30
+FPS = 60
 
-# 色の定義 (RGB)
+# 色定義
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
+PURPLE = (200, 0, 200)
 # ★担当アイテムの色
 PINK = (255, 192, 203) # ラケット巨大化
 ORANGE = (255, 165, 0) # 残機増加
@@ -56,6 +57,7 @@ def load_sounds():
         print(f"効果音ファイルの読み込みに失敗しました: {e}")
     
     return sounds
+PURPLE = (200, 0, 200)
 
 # --- クラス定義 ---
 
@@ -90,30 +92,28 @@ class Particle:
         screen.blit(particle_surface, (int(self.x) - self.size, int(self.y) - self.size))
 
 class Paddle:
-    """ ラケット（操作対象）のクラス """
     def __init__(self):
         self.rect = pg.Rect(
-            (SCREEN_WIDTH - PADDLE_WIDTH) // 2, 
-            SCREEN_HEIGHT - PADDLE_HEIGHT - 20, 
-            PADDLE_WIDTH, 
+            (SCREEN_WIDTH - PADDLE_WIDTH) // 2,
+            SCREEN_HEIGHT - PADDLE_HEIGHT - 20,
+            PADDLE_WIDTH,
             PADDLE_HEIGHT
         )
         self.speed = 10
 
     def update(self, keys):
-        """ キー入力に基づきラケットを移動 """
         if keys[pg.K_a]:
             self.rect.move_ip(-self.speed, 0)
         if keys[pg.K_d]:
             self.rect.move_ip(self.speed, 0)
         
+        # 画面外に出ないように制限
         if self.rect.left < 0:
             self.rect.left = 0
         if self.rect.right > SCREEN_WIDTH:
             self.rect.right = SCREEN_WIDTH
 
     def draw(self, screen):
-        """ ラケットを画面に描画 """
         pg.draw.rect(screen, BLUE, self.rect)
 
 class Ball:
@@ -121,9 +121,9 @@ class Ball:
     def __init__(self):
         # ... (既存の rect, vx, vy, speed の設定はそのまま) ...
         self.rect = pg.Rect(
-            SCREEN_WIDTH // 2 - BALL_RADIUS, 
-            SCREEN_HEIGHT - PADDLE_HEIGHT - 50, 
-            BALL_RADIUS * 2, 
+            SCREEN_WIDTH // 2 - BALL_RADIUS,
+            SCREEN_HEIGHT - PADDLE_HEIGHT - 50,
+            BALL_RADIUS * 2,
             BALL_RADIUS * 2
         )
         self.vx = random.choice([-5, 5])
@@ -222,7 +222,6 @@ class Ball:
         # --- ▲ ------------------------- ▲ ---
 
     def is_out_of_bounds(self):
-        """ ボールが画面下に落ちたか判定 """
         return self.rect.top > SCREEN_HEIGHT
 
     # --- ▼ アイテム効果を適用するメソッドを追加 ▼ ---
@@ -253,14 +252,12 @@ class Ball:
         self.rect.center = center # 中心を再設定
 
 class Block(pg.Rect):
-    """ ブロックのクラス (pg.Rectを継承) """
     def __init__(self, x, y, color):
         super().__init__(x, y, BLOCK_WIDTH, BLOCK_HEIGHT)
         self.color = color
         # (ここに hp や is_item_block などの属性が追加される)
 
     def draw(self, screen):
-        """ ブロックを画面に描画 """
         pg.draw.rect(screen, self.color, self)
 
 class item1:
@@ -323,6 +320,18 @@ class Item(pg.Rect):
             self.color = ORANGE 
         elif self.item_type == "increase_ball":
             self.color = CYAN 
+        elif item_type == "life_up":
+            self.color = (255, 0, 0)        # 赤
+        elif item_type == "large_ball":
+            self.color = (0, 255, 0)        # 緑
+        elif item_type == "penetrate":
+            self.color = (255, 255, 0)      # 黄
+        elif item_type == "bomb":
+            self.color = (255, 100, 100)    # ピンク寄り
+        elif item_type == "helper":
+            self.color = (200, 0, 200)      # 紫
+        else:
+            self.color = (255, 255, 255)    # 未定義なら白
             
         self.speed = 3 # 落下速度
         item_width = 20
@@ -374,6 +383,70 @@ class Item2(pg.Rect):
         """ ラケットとの衝突を判定する """
         return self.colliderect(paddle_rect)
 
+# --- Item3：爆弾・助っ人こうかとん ---
+class Item3:
+    def __init__(self, x, y, item_type):
+        self.item_type = item_type
+        self.speed = 3
+        self.active = False
+        self.image = None
+        size = 20
+        self.rect = pg.Rect(x - size//2, y - size//2, size, size)
+        self.vx = -7  # 右から左
+        self.row_y = y
+        self.life = 0
+        self.color = RED if item_type == "bomb" else PURPLE
+
+    def update(self, blocks=None):
+        if not self.active:
+            self.rect.move_ip(0, self.speed)
+        else:
+            self.rect.move_ip(self.vx, 0)
+            if blocks:
+                # 横方向で重なったブロックだけ削除
+                for block in blocks[:]:
+                    if abs(block.centery - self.row_y) < BLOCK_HEIGHT // 2 and \
+                       block.left < self.rect.right and block.right > self.rect.left:
+                        blocks.remove(block)
+            self.life -= 1
+            if self.life <= 0 or self.rect.right < 0:
+                self.active = False
+
+    def draw(self, screen):
+        if self.active and self.image:
+            screen.blit(self.image, self.rect)
+        else:
+            pg.draw.rect(screen, self.color, self.rect)
+
+    def check_collision(self, paddle_rect):
+        return self.rect.colliderect(paddle_rect)
+
+    def activate(self, blocks):
+        if self.item_type == "bomb":
+            if not blocks: return
+            target = random.choice(blocks)
+            destroyed = []
+            for block in blocks[:]:
+                if abs(block.centerx - target.centerx) <= BLOCK_WIDTH + 5 and \
+                   abs(block.centery - target.centery) <= BLOCK_HEIGHT + 5:
+                    destroyed.append(block)
+            for b in destroyed:
+                blocks.remove(b)
+        else:
+            try:
+                self.image = pg.image.load("koukaton.jpg")
+                self.image = pg.transform.scale(self.image, (50, 50))
+            except:
+                self.image = None
+            self.active = True
+            self.life = 200
+            # 一番上の行から右端に出現
+            if blocks:
+                rows = sorted(list(set(block.centery for block in blocks)))
+                self.row_y = rows[0]
+                self.rect.centery = self.row_y
+            self.rect.right = SCREEN_WIDTH
+
 # --- メイン処理 ---
 def create_block_row(y: int) -> list[Block]:
     """
@@ -410,14 +483,13 @@ def main():
     # Pygameの初期化
     pg.init()
     screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pg.display.set_caption("ウォールブレイカー（担当分 落下テスト版）")
+    pg.display.set_caption("ウォールブレイカー")
     clock = pg.time.Clock()
     font = pg.font.Font(None, 50) 
     
     # 効果音のロード
     sounds = load_sounds()
 
-    # オブジェクトのインスタンス化
     paddle = Paddle()
     
     # ボールはリスト管理
@@ -425,6 +497,8 @@ def main():
     
     # 落下アイテムリスト
     items = [] 
+
+    item3_list = []
     
     blocks = []
     
@@ -455,7 +529,9 @@ def main():
         "increase_life", # item1
         "increase_ball", # item1
         "large_ball",   # item2
-        "penetrate"     # item2
+        "penetrate",     # item2
+        "bomb",          #item3
+        "helper"        #item3
     ]
 
     # --- ゲームループ ---
@@ -529,6 +605,13 @@ def main():
                         elif item_type == "penetrate":
                             ball.set_penetrate(True) # 貫通化 
 
+                # --- item3の効果発動 ---
+                if item_type in ["bomb", "helper"]:
+                    # Item3のインスタンスを生成して効果発動
+                    item3 = Item3(item.centerx, item.centery, item_type)
+                    item3.activate(blocks)
+                    item3_list.append(item3)
+
                 items.remove(item) # アイテムをリストから削除
                 
             # 画面外に出たら削除
@@ -599,6 +682,14 @@ def main():
             item.draw(screen)
         # --- ▲ ----------------- ▲ ---
 
+        # --- Item3 の更新・描画 ---
+        for i3 in item3_list[:]:
+            i3.update(blocks)
+            i3.draw(screen)
+            if not i3.active and i3.rect.top > SCREEN_HEIGHT:
+                item3_list.remove(i3)
+
+
         # ... (スコア表示、ゲームオーバー / クリア表示 はそのまま) ...
         score_text = font.render(f"SCORE: {score}", True, WHITE)
         screen.blit(score_text, (10, 10))
@@ -606,17 +697,13 @@ def main():
         screen.blit(life_text, (SCREEN_WIDTH - life_text.get_width() - 10, 10))
 
 
+
         if game_over:
-            msg_text = font.render("GAME OVER", True, RED)
-            screen.blit(msg_text, (SCREEN_WIDTH // 2 - msg_text.get_width() // 2, SCREEN_HEIGHT // 2 - 50))
-            msg_text2 = font.render("Press 'R' to Restart", True, WHITE)
-            screen.blit(msg_text2, (SCREEN_WIDTH // 2 - msg_text2.get_width() // 2, SCREEN_HEIGHT // 2))
-        
-        if game_clear:
-            msg_text = font.render("GAME CLEAR!", True, YELLOW)
-            screen.blit(msg_text, (SCREEN_WIDTH // 2 - msg_text.get_width() // 2, SCREEN_HEIGHT // 2 - 50))
-            msg_text2 = font.render("Press 'R' to Restart", True, WHITE)
-            screen.blit(msg_text2, (SCREEN_WIDTH // 2 - msg_text2.get_width() // 2, SCREEN_HEIGHT // 2))
+            over_text = font.render("GAME OVER - Press R to Restart", True, RED)
+            screen.blit(over_text, (100, SCREEN_HEIGHT // 2))
+        elif game_clear:
+            clear_text = font.render("GAME CLEAR! - Press R to Restart", True, YELLOW)
+            screen.blit(clear_text, (100, SCREEN_HEIGHT // 2))
 
 
         pg.display.update()
